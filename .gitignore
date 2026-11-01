@@ -1,0 +1,5 @@
+/monomodule
+/src/monomodule
+*.test
+/dist/
+/demo*.wav

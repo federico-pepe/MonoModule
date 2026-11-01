@@ -1,0 +1,11 @@
+{
+  "id": "monomodule",
+  "name": "MonoModule",
+  "description": "Monomachine-style six-voice synth for Push 3: 22 machines, filter and LFOs, pitched sequencer with parameter locks, POLY mode, arpeggiator, kits and songs.",
+  "author": "ragdolljoseph",
+  "homepage": "https://github.com/ragdolljoseph/push-hack-monomodule",
+  "github_repo": "ragdolljoseph/push-hack-monomodule",
+  "default_branch": "main",
+  "asset_name": "monomodule.tar.gz",
+  "requires": ["push-audio-loopback"]
+}

@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MonoModule</title>
+<style>
+:root{
+  --bg:#1b1f17; --panel:#252b20; --panel2:#2d3527; --line:#3d4834; --fg:#e4ecd2; --dim:#93a07f;
+  --lcd:#9bbd3d; --lcdfg:#101b06; --acc:#c6e35a; --warn:#ffd35c; --bad:#e8604c;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: light){
+  :root{ --bg:#eef2e4; --panel:#e2e8d3; --panel2:#d6dec3; --line:#b9c4a1; --fg:#1d2615; --dim:#5d6b4a; --acc:#46630d; --warn:#8a5a00; --bad:#b3321f; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,sans-serif}
+button,select,input{font:inherit;color:inherit}
+button{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
+button:hover{border-color:var(--acc)}
+button.on{background:var(--acc);color:#101b06;border-color:var(--acc)}
+button.rec.on{background:var(--bad);border-color:var(--bad);color:#fff}
+select,input[type=number],input[type=text]{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:4px 6px}
+header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+h1{font-size:17px;margin:0 8px 0 0;letter-spacing:.08em}
+.lcd{background:var(--lcd);color:var(--lcdfg);font-family:var(--mono);padding:4px 10px;border-radius:4px;white-space:nowrap}
+.meter{width:90px;height:10px;background:var(--panel2);border-radius:5px;overflow:hidden}
+.meter i{display:block;height:100%;width:0;background:var(--acc)}
+main{padding:12px 16px 120px;max-width:1280px;margin:0 auto}
+.tracks{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-bottom:12px}
+.trk{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px;cursor:pointer}
+.trk.sel{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset}
+.trk b{font-family:var(--mono)}
+.trk select{width:100%;min-width:0;margin-top:4px}
+.trk{min-width:0}
+.trk .row{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px}
+.panel h2{font-size:13px;margin:0 0 8px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase}
+.knobs{display:grid;grid-template-columns:repeat(8,1fr);gap:10px}
+.knob{text-align:center;min-width:0}
+.knob label{display:block;font-family:var(--mono);font-size:12px;color:var(--dim)}
+.knob .val{font-family:var(--mono);font-size:18px}
+.knob small{display:block;min-height:1.2em;color:var(--dim);font-size:11px}
+.knob input[type=range]{width:100%}
+input[type=range]{accent-color:var(--acc)}
+.grid{overflow-x:auto}
+.grid table{border-collapse:separate;border-spacing:3px}
+.grid td{min-width:34px;height:34px;text-align:center;font:11px var(--mono);background:var(--panel2);border-radius:4px;cursor:pointer;user-select:none;position:relative}
+.grid td.beat{background:#33402b}
+@media (prefers-color-scheme: light){.grid td.beat{background:#c7d1b0}}
+.grid td.on{background:var(--acc);color:#101b06;font-weight:700}
+.grid td.off{background:var(--warn);color:#101b06}
+.grid td.sel{outline:2px solid var(--fg)}
+.grid td.play{box-shadow:0 0 0 2px var(--warn) inset}
+.grid td.lock::after{content:"";position:absolute;right:3px;top:3px;width:6px;height:6px;border-radius:50%;background:var(--bad)}
+.grid th{font:11px var(--mono);color:var(--dim);font-weight:400;padding-right:6px}
+.grid td.layer.on{background:#5aa0e8;color:#fff}
+.grid td.layer.slide.on{background:#4cc78a}
+.flex{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.flex label{display:flex;gap:6px;align-items:center;color:var(--dim)}
+.banks{display:grid;grid-template-columns:repeat(16,1fr);gap:4px}
+.banks button{padding:4px 0;font:11px var(--mono)}
+.banks button.cur{background:var(--acc);color:#101b06}
+.banks button.next{outline:2px solid var(--warn)}
+.banks button.used{border-color:var(--acc)}
+.piano{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);padding:6px 12px;z-index:6}
+.piano .keys{position:relative;height:64px;margin:4px 0 0;touch-action:none;user-select:none}
+.piano .k{position:absolute;top:0;border:1px solid var(--line);border-radius:0 0 4px 4px}
+.piano .w{background:#f0f4e6;height:64px}
+.piano .b{background:#1d2315;height:40px;z-index:2}
+.piano .k.down{background:var(--acc)}
+.piano .ctl{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--dim)}
+table.songt{border-collapse:collapse;width:100%}
+table.songt td,table.songt th{border-bottom:1px solid var(--line);padding:4px 6px;text-align:left;font-family:var(--mono)}
+.note{color:var(--dim);font-size:12px}
+.err{color:var(--bad)}
+@media (max-width:760px){
+  .tracks{grid-template-columns:repeat(3,minmax(0,1fr))} .knobs{grid-template-columns:repeat(4,1fr)} .banks{grid-template-columns:repeat(8,1fr)}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>MONOMODULE</h1>
+  <button id="play">Play</button><button id="stop">Stop</button><button id="rec" class="rec">Rec</button>
+  <label>BPM <input id="tempo" type="number" min="30" max="300" step="0.5" style="width:78px"></label>
+  <select id="sync"><option value="0">Internal clock</option><option value="1">MIDI clock</option></select>
+  <span class="lcd" id="posl">A01 01/16</span>
+  <span class="lcd" id="kitl">KIT001</span>
+  <div class="meter" title="output level"><i id="lvl"></i></div>
+  <span id="audio" class="note"></span>
+</header>
+<main>
+  <div class="tracks" id="tracks"></div>
+  <div class="tabs" id="tabs"></div>
+  <div id="view"></div>
+</main>
+<div class="piano">
+  <div class="ctl">
+    <span>Keyboard plays <b id="ktrack">T1</b></span>
+    <label>Octave <input id="oct" type="number" min="-3" max="5" value="1" style="width:56px"></label>
+    <label><input id="stepin" type="checkbox"> enter notes into selected step (shift = add to chord)</label>
+    <span>Computer keys: Z-M, Q-U</span>
+  </div>
+  <div class="keys" id="keys"></div>
+</div>
+<script>
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const NOTE = ["C-","C#","D-","D#","E-","F-","F#","G-","G#","A-","A#","B-"];
+const noteName = n => NOTE[n % 12] + (Math.floor(n / 12) - 2);
+let S = null, M = null, track = 0, tab = "sound", page = 0, selStep = null, dragging = false;
+let bank = 0;
+
+async function api(path, body, method) {
+  const raw = body instanceof ArrayBuffer;
+  const opt = { method: method || (body === undefined ? "GET" : "POST") };
+  if (body !== undefined) { opt.headers = { "Content-Type": raw ? "audio/wav" : "application/json" }; opt.body = raw ? body : JSON.stringify(body); }
+  const r = await fetch("/api/" + path, opt);
+  if (!r.ok) { flash(await r.text()); throw new Error(path); }
+  return r;
+}
+const post = (p, b) => api(p, b).catch(() => {});
+let flashT;
+function flash(msg) { const a = $("#audio"); a.textContent = msg; a.classList.add("err"); clearTimeout(flashT); flashT = setTimeout(() => { a.classList.remove("err"); }, 4000); }
+
+/* ---------------------------------------------------------- static parts */
+const TABS = [["sound", "Sound"], ["seq", "Sequencer"], ["arp", "Track & arp"], ["kit", "Kit & master"], ["song", "Song"], ["waves", "Waves"], ["sys", "System"]];
+function buildTabs() {
+  $("#tabs").innerHTML = TABS.map(([k, n]) => `<button data-t="${k}" class="${k === tab ? "on" : ""}">${n}</button>`).join("");
+  $("#tabs").onclick = e => { const t = e.target.dataset.t; if (t) { tab = t; buildTabs(); build(); } };
+}
+function buildTracks() {
+  $("#tracks").innerHTML = S.tracks.map((t, i) => `
+    <div class="trk ${i === track ? "sel" : ""}" data-i="${i}">
+      <div class="row"><b>T${i + 1}</b><span class="meter" style="width:50px"><i id="pk${i}"></i></span>
+        <button data-mute="${i}" class="${t.mute ? "on" : ""}">M</button></div>
+      <select data-mach="${i}">${groupedMachines(t.machine)}</select>
+    </div>`).join("");
+}
+function groupedMachines(sel) {
+  let out = "", g = "";
+  M.machines.forEach(m => {
+    if (m.group !== g) { if (g) out += "</optgroup>"; out += `<optgroup label="${m.group}">`; g = m.group; }
+    out += `<option value="${m.id}" ${m.id === sel ? "selected" : ""}>${m.name}</option>`;
+  });
+  return out + "</optgroup>";
+}
+$("#tracks").addEventListener("click", e => {
+  const mu = e.target.closest("[data-mute]");
+  if (mu) { const i = +mu.dataset.mute; post("mute", { track: i, mute: !S.tracks[i].mute }); return; }
+  if (e.target.tagName === "SELECT") return;
+  const t = e.target.closest(".trk"); if (t) { track = +t.dataset.i; selStep = null; buildTracks(); build(); }
+});
+$("#tracks").addEventListener("change", e => {
+  const m = e.target.dataset.mach; if (m !== undefined) post("machine", { track: +m, machine: +e.target.value });
+});
+$("#play").onclick = () => post("transport", { action: "toggle" });
+$("#stop").onclick = () => post("transport", { action: "stop" });
+$("#rec").onclick = () => post("transport", { action: "record", value: S.record ? 0 : 1 });
+$("#tempo").onchange = e => post("transport", { action: "tempo", value: +e.target.value });
+$("#sync").onchange = e => post("transport", { action: "sync", value: +e.target.value });
+
+/* ---------------------------------------------------------------- views */
+function build() {
+  const v = $("#view");
+  ({ sound: viewSound, seq: viewSeq, arp: viewArp, kit: viewKit, song: viewSong, waves: viewWaves, sys: viewSys })[tab](v);
+  update();
+}
+function pname(p) { return M.names[S.tracks[track].machine][p]; }
+function note(m, p, v) {
+  const lp = (p / 8) | 0, i = p % 8;
+  if (p === 13 + 0 && false) return "";
+  if (p === 14) return v >= 62 && v <= 66 ? "CENTER" : v < 64 ? "L" + Math.round((64 - v) * 100 / 64) : "R" + Math.round((v - 64) * 100 / 63);
+  if (p === 9) return v >= 127 ? "INFINITE" : "";
+  if (p === 25) return ((v - 64) * 36 / 64).toFixed(1) + " dB";
+  if (p === 27) return v < 62 ? "STEREO" : v > 66 ? "PING-PONG" : "OFF";
+  if (p === 28) return (v + 1) + "/256";
+  if (lp >= 4) {
+    if (i === 0) return ["SYN","AMP","FLT","FX","LFO1","LFO2","LFO3","PTCH"][Math.min(7, v >> 4)];
+    if (i === 2) return ["FREE","TRIG","HOLD","ONE","HALF"][Math.min(4, Math.floor(v * 5 / 128))];
+    if (i === 3) return ["TRI","SIN","SQR","SAW","EXP","RMP","-TRI","-SIN","-SQR","-SAW","RND"][Math.min(10, Math.floor(v * 11 / 128))];
+  }
+  return "";
+}
+const BIPOLAR = new Set([14, 22, 23, 25, 27]);
+function isBip(p) { return BIPOLAR.has(p) || (p >= 32 && p % 8 === 7); }
+function knobHTML(p, v, extra) {
+  return `<div class="knob"><label>${pname(p)}</label><div class="val" id="kv${p}">${v}</div>
+    <input type="range" min="0" max="127" value="${v}" data-p="${p}" ${extra || ""}><small id="kn${p}">${note(S.tracks[track].machine, p, v)}</small></div>`;
+}
+function viewSound(v) {
+  const names = M.pages;
+  v.innerHTML = `<div class="tabs">${names.map((n, i) => `<button data-pg="${i}" class="${i === page ? "on" : ""}">${n}</button>`).join("")}</div>
+  <div class="panel"><h2>${S.tracks[track].name} &middot; track ${track + 1} &middot; ${names[page]}</h2>
+  <div class="knobs">${[...Array(8)].map((_, i) => knobHTML(page * 8 + i, S.tracks[track].params[page * 8 + i])).join("")}</div>
+  ${selStep && selStep.t === track ? `<p class="note">Step ${selStep.s + 1} is selected: turn on "Lock to step" in the Sequencer tab to write these values as parameter locks.</p>` : ""}
+  </div>`;
+  v.onclick = e => { const g = e.target.dataset.pg; if (g !== undefined) { page = +g; build(); } };
+  v.oninput = e => {
+    const p = e.target.dataset.p; if (p === undefined) return;
+    const val = +e.target.value, pn = +p;
+    $("#kv" + p).textContent = val; $("#kn" + p).textContent = note(S.tracks[track].machine, pn, val);
+    if (lockMode && selStep && selStep.t === track) post("lock", { track, step: selStep.s, param: pn, value: val });
+    else post("param", { track, param: pn, value: val });
+  };
+  v.onpointerdown = () => dragging = true; v.onpointerup = () => dragging = false;
+}
+let lockMode = false;
+
+function viewSeq(v) {
+  const P = S.pat;
+  v.innerHTML = `
+  <div class="panel"><h2>Pattern ${S.patternName}${S.editPattern !== S.pattern ? " (editing " + patName(S.editPattern) + ")" : ""}</h2>
+    <div class="banks" id="banks"></div>
+    <p class="note">Click a pattern to queue it; Shift-click switches at once.</p></div>
+  <div class="panel"><h2>Steps</h2><div class="grid" id="grid"></div>
+    <div class="flex" style="margin-top:8px">
+      <label><input type="checkbox" id="lockmode" ${lockMode ? "checked" : ""}> Lock to step (Sound tab edits the selected step)</label>
+      <button id="shl">&larr; Shift</button><button id="shr">Shift &rarr;</button>
+      <button id="ctr">Clear track</button><button id="cpt">Clear pattern</button>
+      <button id="tru">Track +1</button><button id="trd">Track -1</button>
+    </div></div>
+  <div class="panel" id="stepedit"></div>
+  <div class="panel"><h2>Pattern settings</h2><div class="flex">
+    <label>Length <input type="number" id="plen" min="2" max="64" value="${P.len}" style="width:64px"></label>
+    <label>Scale <select id="pscale">${M.scales.map((s, i) => `<option value="${i}" ${i === P.scale ? "selected" : ""}>${s}</option>`).join("")}</select></label>
+    <label>Swing <input type="number" id="pswing" min="50" max="80" value="${P.swingAmt}" style="width:64px">%</label>
+    <label>Kit at start <input type="number" id="pkit" min="0" max="128" value="${P.kit + 1}" style="width:64px"> <span class="note">(0 = keep)</span></label>
+    <label>Transpose <input type="number" id="ptrans" min="-24" max="24" value="${P.trans}" style="width:64px"></label>
+    <label><input type="checkbox" id="ppoly" ${P.poly ? "checked" : ""}> POLY on track</label>
+    <select id="ppt">${[...Array(6)].map((_, i) => `<option value="${i}" ${i === P.polyTrack ? "selected" : ""}>T${i + 1}</option>`).join("")}</select>
+  </div></div>`;
+  buildBanks(); buildGrid(); buildStepEdit();
+  $("#lockmode").onchange = e => lockMode = e.target.checked;
+  $("#shl").onclick = () => post("edit", { action: "shift-track", track, value: -1 });
+  $("#shr").onclick = () => post("edit", { action: "shift-track", track, value: 1 });
+  $("#ctr").onclick = () => post("edit", { action: "clear-track", track });
+  $("#cpt").onclick = () => confirm("Clear this pattern?") && post("edit", { action: "clear-pattern", from: S.editPattern });
+  $("#tru").onclick = () => post("edit", { action: "transpose-track", track, value: 1 });
+  $("#trd").onclick = () => post("edit", { action: "transpose-track", track, value: -1 });
+  const o = (id, key, f = x => +x) => $(id).onchange = e => post("patopt", { [key]: f(e.target.value) });
+  o("#plen", "len"); o("#pscale", "scale"); o("#pswing", "swingAmt"); o("#pkit", "kit", x => +x - 1); o("#ptrans", "trans");
+  o("#ppt", "polyTrack"); $("#ppoly").onchange = e => post("patopt", { poly: e.target.checked, polyTrack: +$("#ppt").value });
+}
+function patName(n) { return "ABCDEFGH"[n >> 4] + String((n & 15) + 1).padStart(2, "0"); }
+function buildBanks() {
+  const b = $("#banks"); if (!b) return;
+  let h = "";
+  for (let i = 0; i < 128; i++) {
+    if (i >> 4 !== bank) continue;
+    h += `<button data-pn="${i}" class="${i === S.pattern ? "cur" : i === S.next ? "next" : ""}">${patName(i)}</button>`;
+  }
+  b.innerHTML = `<div style="grid-column:1/-1;display:flex;gap:4px">${[...Array(8)].map((_, i) => `<button data-bank="${i}" class="${i === bank ? "on" : ""}">${"ABCDEFGH"[i]}</button>`).join("")}</div>` + h;
+  b.onclick = e => {
+    if (e.target.dataset.bank) { bank = +e.target.dataset.bank; buildBanks(); return; }
+    const n = e.target.dataset.pn; if (n !== undefined) post("pattern", { n: +n, now: e.shiftKey });
+  };
+}
+function buildGrid() {
+  const g = $("#grid"); if (!g) return;
+  const len = S.pat.len, tr = S.grid[track];
+  let h = "<table><tr><th></th>" + [...Array(len)].map((_, i) => `<th>${i + 1}</th>`).join("") + "</tr>";
+  S.grid.forEach((row, t) => {
+    h += `<tr><th>T${t + 1}</th>` + row.map((c, s) => {
+      const cls = ["", c.on ? (c.off ? "off" : "on") : "", s % 4 === 0 ? "beat" : "", S.playing && S.step === s ? "play" : "",
+        selStep && selStep.t === t && selStep.s === s ? "sel" : "", c.k ? "lock" : ""].join(" ");
+      const txt = c.on ? (c.off ? "OFF" : noteName(c.n[0]) + (c.n.length > 1 ? "+" : "")) : "";
+      return `<td class="${cls}" data-t="${t}" data-s="${s}">${txt}</td>`;
+    }).join("") + "</tr>";
+  });
+  ["swing", "slide"].forEach(l => {
+    h += `<tr><th>${l.toUpperCase().slice(0, 4)}</th>` + [...Array(len)].map((_, s) =>
+      `<td class="layer ${l} ${S.pat[l].includes(s) ? "on" : ""}" data-layer="${l}" data-s="${s}">${S.pat[l].includes(s) ? "&bull;" : ""}</td>`).join("") + "</tr>";
+  });
+  g.innerHTML = h + "</table>";
+  g.onclick = e => {
+    const td = e.target.closest("td"); if (!td) return;
+    if (td.dataset.layer) { post("layer", { layer: td.dataset.layer, step: +td.dataset.s }); return; }
+    const t = +td.dataset.t, s = +td.dataset.s, c = S.grid[t][s];
+    if (track !== t) { track = t; buildTracks(); }
+    if (!c.on) { post("step", { track: t, step: s, action: "toggle", value: lastNote(t) }); selStep = { t, s }; }
+    else if (selStep && selStep.t === t && selStep.s === s) { post("step", { track: t, step: s, action: "clear" }); selStep = null; }
+    else selStep = { t, s };
+    buildStepEdit(); buildGrid();
+  };
+}
+function lastNote(t) { for (let s = S.grid[t].length - 1; s >= 0; s--) { const c = S.grid[t][s]; if (c.on && !c.off) return c.n[0]; } return 60; }
+const TRIGS = [["Amp", 1], ["Filter", 2], ["LFO", 4]];
+function buildStepEdit() {
+  const el = $("#stepedit"); if (!el) return;
+  if (!selStep) { el.innerHTML = `<h2>Step</h2><p class="note">Click an empty cell to add a trig; click a trig to edit it; click it again to remove it.</p>`; return; }
+  const c = S.grid[selStep.t][selStep.s];
+  if (!c || !c.on) { el.innerHTML = `<h2>Step</h2><p class="note">Empty step.</p>`; return; }
+  el.innerHTML = `<h2>Track ${selStep.t + 1} step ${selStep.s + 1}</h2><div class="flex">
+    <label>Note <input type="number" id="sn" min="0" max="127" value="${c.n[0]}" style="width:64px"><b>${noteName(c.n[0])}</b></label>
+    ${c.n.length > 1 ? `<span class="lcd">${c.n.map(noteName).join(" ")}</span>` : ""}
+    <label>Velocity <input type="number" id="sv" min="1" max="127" value="${c.v}" style="width:64px"></label>
+    <label>Length <input type="number" id="sl" min="1" max="127" value="${c.l}" style="width:64px"><span class="note">(1/8 steps)</span></label>
+    ${TRIGS.map(([n, b]) => `<label><input type="checkbox" data-trig="${b}" ${(c.x & b) ? "checked" : ""}> ${n}</label>`).join("")}
+    <button id="soff">Note off</button><button id="slock">Clear locks</button>
+  </div><p class="note">Trigs with none of Amp / Filter / LFO ticked are trigless: they change pitch and locks without restarting the sound. Use the keyboard below to set the note (tick the box next to it).</p>`;
+  const st = a => post("step", { track: selStep.t, step: selStep.s, ...a });
+  $("#sn").onchange = e => st({ action: "note", value: +e.target.value });
+  $("#sv").onchange = e => st({ action: "vel", value: +e.target.value });
+  $("#sl").onchange = e => st({ action: "len", value: +e.target.value });
+  $("#soff").onclick = () => st({ action: "off" });
+  $("#slock").onclick = () => st({ action: "unlock", value: -1 });
+  el.querySelectorAll("[data-trig]").forEach(cb => cb.onchange = () => {
+    let x = 0; el.querySelectorAll("[data-trig]").forEach(b => { if (b.checked) x |= +b.dataset.trig; }); st({ action: "trig", value: x });
+  });
+}
+
+function viewArp(v) {
+  const t = S.tracks[track], a = t.arp;
+  const sel = (id, arr, cur) => `<select id="${id}">${arr.map((n, i) => `<option value="${i}" ${i === cur ? "selected" : ""}>${n}</option>`).join("")}</select>`;
+  v.innerHTML = `<div class="panel"><h2>Arpeggiator &middot; track ${track + 1}</h2><div class="flex">
+    <label>Mode ${sel("am", M.arpModes, a.mode)}</label><label>Speed ${sel("as", M.arpSpeeds, a.speed)}</label>
+    <label>Range <input id="ar" type="number" min="1" max="4" value="${a.range}" style="width:56px"></label>
+    <label>Gate <input id="al" type="range" min="1" max="127" value="${a.len}"></label>
+    <label>Play ${sel("ap", M.arpPlay, a.play)}</label></div>
+    <p class="note">NORM follows held keys and sequencer chords; LATCH keeps the last chord; SID only arpeggiates two or more keys.</p></div>
+  <div class="panel"><h2>Track options</h2><div class="flex">
+    <label>Transpose <input id="tt" type="number" min="-48" max="48" value="${t.trans}" style="width:64px"></label>
+    <label><input id="tf" type="checkbox" ${t.transFix ? "checked" : ""}> Ignore pattern/song transpose</label>
+    <label><input id="khp" type="checkbox" ${t.keyHP ? "checked" : ""}> Key-track high-pass</label>
+    <label><input id="klp" type="checkbox" ${t.keyLP ? "checked" : ""}> Key-track low-pass</label></div>
+    ${M.machines[t.machine].group === "FX" ? `<div class="flex" style="margin-top:8px"><b>FX input from:</b>${[...Array(track)].map((_, i) =>
+      `<label><input type="checkbox" data-src="${i}" ${(t.src >> i) & 1 ? "checked" : ""}> T${i + 1}</label>`).join("") || "<span class='note'>no lower tracks</span>"}</div>` : ""}
+  </div>`;
+  const arp = () => post("track", { track, arp: { mode: +$("#am").value, speed: +$("#as").value, range: +$("#ar").value, len: +$("#al").value, play: +$("#ap").value } });
+  ["#am", "#as", "#ar", "#al", "#ap"].forEach(i => $(i).onchange = arp);
+  $("#tt").onchange = e => post("track", { track, trans: +e.target.value });
+  $("#tf").onchange = e => post("track", { track, transFix: e.target.checked });
+  $("#khp").onchange = e => post("track", { track, keyHP: e.target.checked });
+  $("#klp").onchange = e => post("track", { track, keyLP: e.target.checked });
+  v.querySelectorAll("[data-src]").forEach(cb => cb.onchange = () => {
+    let m = 0; v.querySelectorAll("[data-src]").forEach(b => { if (b.checked) m |= 1 << +b.dataset.src; }); post("track", { track, src: m });
+  });
+}
+
+function viewKit(v) {
+  v.innerHTML = `<div class="panel"><h2>Kit</h2><div class="flex">
+    <label>Slot <input id="kn" type="number" min="1" max="128" value="${S.kit.n + 1}" style="width:70px"></label>
+    <label>Name <input id="kname" type="text" maxlength="12" value="${S.kit.name}" style="width:130px"></label>
+    <button id="kload">Load</button><button id="ksave">Save to slot</button><button id="kreset">Init kit</button></div>
+    <p class="note">Loading copies the slot into the working kit; saving writes the working kit back.</p></div>
+  <div class="panel"><h2>Master strip <span class="note">(compressor, tilt EQ and limiter are additions; the hardware has none)</span></h2>
+    <div class="knobs">${M.master.map((n, i) => `<div class="knob"><label>${n}</label><div class="val" id="mv${i}">${S.master[i]}</div>
+      <input type="range" min="0" max="127" value="${S.master[i]}" data-m="${i}"></div>`).join("")}</div></div>`;
+  const n = () => +$("#kn").value - 1;
+  $("#kload").onclick = () => post("kit", { action: "load", n: n() });
+  $("#ksave").onclick = () => post("kit", { action: "save", n: n(), name: $("#kname").value });
+  $("#kreset").onclick = () => post("kit", { action: "reset", n: 0 });
+  v.oninput = e => { const m = e.target.dataset.m; if (m !== undefined) { $("#mv" + m).textContent = e.target.value; post("master", { index: +m, value: +e.target.value }); } };
+  v.onpointerdown = () => dragging = true; v.onpointerup = () => dragging = false;
+}
+
+function viewSong(v) {
+  const s = S.song;
+  v.innerHTML = `<div class="panel"><h2>Song</h2><div class="flex">
+    <label>Song <input id="sg" type="number" min="1" max="24" value="${s.n + 1}" style="width:64px"></label>
+    <button id="son" class="${s.on ? "on" : ""}">Song mode ${s.on ? "on" : "off"}</button>
+    <label>After last row <select id="sloop"><option value="-1" ${s.loop < 0 ? "selected" : ""}>Stop</option>${s.rows.map((_, i) => `<option value="${i}" ${s.loop === i ? "selected" : ""}>Loop to row ${i + 1}</option>`).join("")}</select></label>
+    <button id="sadd">Add row</button></div>
+    <table class="songt"><tr><th>#</th><th>Pattern</th><th>Repeats</th><th>Transpose</th><th></th></tr>
+    ${s.rows.map((r, i) => `<tr class="${s.on && s.row === i ? "on" : ""}"><td>${i + 1}${s.on && s.row === i ? " &#9654;" : ""}</td>
+      <td><select data-r="${i}" data-f="Pattern">${[...Array(128)].map((_, p) => `<option value="${p}" ${p === r.Pattern ? "selected" : ""}>${patName(p)}</option>`).join("")}</select></td>
+      <td><input type="number" data-r="${i}" data-f="Repeats" min="1" max="99" value="${r.Repeats}" style="width:64px"></td>
+      <td><input type="number" data-r="${i}" data-f="Trans" min="-24" max="24" value="${r.Trans}" style="width:64px"></td>
+      <td><button data-del="${i}">Delete</button></td></tr>`).join("")}</table></div>`;
+  const rows = () => s.rows.map(r => ({ ...r }));
+  $("#sg").onchange = e => post("song", { n: +e.target.value - 1, on: S.song.on });
+  $("#son").onclick = () => post("song", { n: s.n, on: !s.on });
+  $("#sloop").onchange = e => post("song", { n: s.n, loopTo: +e.target.value });
+  $("#sadd").onclick = () => post("song", { n: s.n, rows: [...rows(), { Pattern: S.editPattern, Repeats: 1, Trans: 0 }] });
+  v.onchange = e => {
+    const r = e.target.dataset.r; if (r === undefined) return;
+    const rr = rows(); rr[+r][e.target.dataset.f] = +e.target.value; post("song", { n: s.n, rows: rr });
+  };
+  v.onclick = e => { const d = e.target.dataset.del; if (d !== undefined) { const rr = rows(); rr.splice(+d, 1); post("song", { n: s.n, rows: rr }); } };
+}
+
+function viewWaves(v) {
+  v.innerHTML = `<div class="panel"><h2>User waveforms (DPRO-WAVE)</h2>
+    <p class="note">Memory used ${(S.waveUsed / S.waveTotal * 100).toFixed(1)}%. Each WAV is resampled to a single cycle; pick one with DPRO-WAVE's first parameter.</p>
+    <table class="songt"><tr><th>Slot</th><th>Name</th><th>Length</th><th></th></tr>
+    ${[...Array(32)].map((_, i) => { const w = S.waves.find(x => x.slot === i);
+      return `<tr><td>${i + 1}</td><td>${w ? w.name : "<span class=note>empty</span>"}</td>
+      <td>${w ? (w.len / w.rate).toFixed(2) + " s" : ""}</td>
+      <td><input type="file" accept=".wav,audio/wav" data-up="${i}" style="max-width:190px">${w ? ` <button data-clr="${i}">Clear</button>` : ""}</td></tr>`; }).join("")}</table>
+    ${S.imports.length ? `<p class="note">Files in the imports folder: ${S.imports.join(", ")}</p>` : ""}</div>`;
+  v.onchange = async e => {
+    const i = e.target.dataset.up; if (i === undefined || !e.target.files[0]) return;
+    const f = e.target.files[0];
+    try { await api("wave/" + (+i + 1) + "?name=" + encodeURIComponent(f.name), await f.arrayBuffer(), "PUT"); } catch (_) {}
+  };
+  v.onclick = e => { const c = e.target.dataset.clr; if (c !== undefined) api("wave/" + (+c + 1), undefined, "DELETE").catch(() => {}); };
+}
+function liveInput(mode, off) { return mode === "mono" ? String(off + 1) : (off + 1) + "/" + (off + 2); }
+function viewSys(v) {
+  const c = S.config;
+  v.innerHTML = `<div class="panel"><h2>Audio output</h2><div class="flex">
+    <label>Output <select id="omode"><option value="stereo" ${c.output_mode !== "mono" ? "selected" : ""}>Stereo</option><option value="mono" ${c.output_mode === "mono" ? "selected" : ""}>Mono</option></select></label>
+    <label><span id="chlab"></span> <input id="coff" type="number" min="1" max="64" value="${c.channel_offset + 1}" style="width:70px"></label>
+    <span class="lcd" id="livein"></span>
+    <label>MIDI base channel <select id="cmid"><option value="-1" ${c.midi_channel < 0 ? "selected" : ""}>1 (default)</option>${[...Array(16)].map((_, i) => `<option value="${i}" ${c.midi_channel === i ? "selected" : ""}>${i + 1}</option>`).join("")}</select></label>
+    <label>PCM device <input id="cpcm" type="text" value="${c.pcm_device}" style="width:150px"></label>
+    <button id="csave">Apply</button></div>
+    <p class="note">Stereo writes left and right to two neighbouring channels; mono writes (L+R)/2 to one channel. Everything else on the card stays silent, so several modules can share it on different channels. The change applies at once. Then set the Live track's input to the name shown, or use the button below.
+    Track n listens on MIDI channel (base + n - 1). CCs 16-71 on a track's channel set its parameters; on the base channel CC 112 is master volume, 113 tempo, 114 mute all.</p></div>
+  <div class="panel"><h2>Ableton Live</h2><button id="ltr">Create the audio and MIDI tracks in Live</button><pre id="lres" class="note"></pre></div>
+  <div class="panel"><h2>Project</h2><div class="flex"><a href="/api/project" download="monomodule-project.json"><button>Download project</button></a>
+    <label>Restore <input type="file" id="pup" accept=".json"></label></div></div>`;
+  const cap = () => {
+    const mono = $("#omode").value === "mono", off = Math.max(0, (+$("#coff").value || 1) - 1);
+    $("#chlab").textContent = mono ? "Channel" : "First channel";
+    $("#livein").textContent = "Live input: " + liveInput(mono ? "mono" : "stereo", off);
+  };
+  $("#omode").onchange = cap; $("#coff").oninput = cap; cap();
+  $("#csave").onclick = () => post("config", { output_mode: $("#omode").value, channel_offset: Math.max(0, +$("#coff").value - 1), midi_channel: +$("#cmid").value, pcm_device: $("#cpcm").value });
+  $("#ltr").onclick = async () => { try { const r = await (await api("live/tracks", {})).json(); $("#lres").textContent = (r.lines || r.Lines || []).join("\n"); } catch (_) {} };
+  $("#pup").onchange = async e => { const f = e.target.files[0]; if (f) { const b = await f.text(); try { await fetch("/api/project", { method: "POST", body: b }); } catch (_) {} } };
+}
+
+/* ------------------------------------------------------------ live update */
+function update() {
+  if (!S) return;
+  $("#play").classList.toggle("on", S.playing); $("#rec").classList.toggle("on", S.record);
+  if (document.activeElement !== $("#tempo")) $("#tempo").value = S.tempo.toFixed(1);
+  $("#sync").value = S.sync;
+  $("#posl").textContent = `${S.patternName}${S.next >= 0 ? ">" + patName(S.next) : ""} ${String(S.step + 1).padStart(2, "0")}/${String(S.pat.len).padStart(2, "0")}${S.pat.poly ? " POLY" : ""}`;
+  $("#kitl").textContent = "K" + String(S.kit.n + 1).padStart(3, "0") + " " + S.kit.name;
+  $("#lvl").style.width = Math.min(100, S.level * 100) + "%";
+  $("#audio").textContent = S.audio.ok ? "audio ok" : "no audio: " + S.audio.message.split("\n")[0];
+  S.tracks.forEach((t, i) => { const p = $("#pk" + i); if (p) p.style.width = Math.min(100, t.peak * 100) + "%"; });
+  $("#ktrack").textContent = "T" + (track + 1);
+}
+let sig = "";
+function onState(s) {
+  const prev = S; S = s;
+  const structural = JSON.stringify([s.tracks.map(t => [t.machine, t.mute]), s.pat, s.song, s.kit, s.editPattern, s.waves.length, s.grid, s.pattern, s.next]);
+  if (structural !== sig && !dragging) {
+    const machChange = !prev || JSON.stringify(prev.tracks.map(t => t.machine)) !== JSON.stringify(s.tracks.map(t => t.machine));
+    sig = structural;
+    if (machChange || !$("#tracks").children.length) buildTracks(); else s.tracks.forEach((t, i) => $(`[data-mute="${i}"]`).classList.toggle("on", t.mute));
+    if (tab === "seq") { buildBanks(); buildGrid(); buildStepEdit(); } else if (tab === "song" || tab === "waves" || (tab === "sound" && machChange)) build();
+    else if (tab === "kit" && !document.activeElement.matches("input,select")) build();
+  } else if (tab === "seq" && s.playing) buildGrid();
+  if (tab === "sound" && !dragging) s.tracks[track].params.forEach((v, p) => {
+    const r = document.querySelector(`input[data-p="${p}"]`); if (r && document.activeElement !== r) { r.value = v; $("#kv" + p).textContent = v; $("#kn" + p).textContent = note(s.tracks[track].machine, p, v); }
+  });
+  update();
+}
+
+/* --------------------------------------------------------------- keyboard */
+const keysEl = $("#keys"); const down = new Map();
+function buildKeys() {
+  const first = 36, last = 84; let x = 0; const wk = []; const bk = [];
+  for (let n = first; n <= last; n++) (NOTE[n % 12].includes("#") ? bk : wk).push(n);
+  const w = 100 / wk.length; keysEl.innerHTML = "";
+  wk.forEach((n, i) => { const d = document.createElement("div"); d.className = "k w"; d.dataset.n = n; d.style.left = i * w + "%"; d.style.width = w + "%"; keysEl.appendChild(d); });
+  bk.forEach(n => { const i = wk.indexOf(n - 1); const d = document.createElement("div"); d.className = "k b"; d.dataset.n = n; d.style.left = (i + 0.65) * w + "%"; d.style.width = w * 0.7 + "%"; keysEl.appendChild(d); });
+}
+function keyOn(n, shift, id) {
+  if (down.has(id)) return; down.set(id, n);
+  const el = keysEl.querySelector(`[data-n="${n}"]`); if (el) el.classList.add("down");
+  const t = track; post("note", { track: t, note: n, vel: 0.8, on: true }); down.set(id, [n, t]);
+  if ($("#stepin").checked && selStep && selStep.t === t) post("step", { track: t, step: selStep.s, action: shift ? "add" : "note", value: n });
+}
+function keyOff(id) {
+  const d = down.get(id); if (!d) return; down.delete(id);
+  const [n, t] = d; const el = keysEl.querySelector(`[data-n="${n}"]`); if (el) el.classList.remove("down");
+  post("note", { track: t, note: n, on: false });
+}
+keysEl.addEventListener("pointerdown", e => { const k = e.target.closest(".k"); if (!k) return; keysEl.setPointerCapture(e.pointerId); keyOn(+k.dataset.n, e.shiftKey, "p" + e.pointerId); });
+keysEl.addEventListener("pointerup", e => keyOff("p" + e.pointerId));
+keysEl.addEventListener("pointercancel", e => keyOff("p" + e.pointerId));
+addEventListener("keydown", e => {
+  if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
+  const i = "zsxdcvgbhnjmq2w3er5t6y7ui".indexOf(e.key.toLowerCase()); if (i < 0) return;
+  const base = 12 * (+$("#oct").value + 3);
+  keyOn(base + i, e.shiftKey, "k" + e.key.toLowerCase());
+});
+addEventListener("keyup", e => keyOff("k" + e.key.toLowerCase()));
+
+/* ------------------------------------------------------------------- boot */
+async function boot() {
+  buildKeys(); buildTabs();
+  M = await (await fetch("/api/machines")).json();
+  S = await (await fetch("/api/state")).json();
+  buildTracks(); build();
+  const es = new EventSource("/sse/state");
+  es.onmessage = ev => onState(JSON.parse(ev.data));
+  es.onerror = () => { $("#audio").textContent = "connection lost, retrying..."; };
+}
+boot();
+</script>
+</body>
+</html>

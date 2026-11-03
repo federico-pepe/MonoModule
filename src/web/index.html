@@ -275,16 +275,26 @@ function buildGrid() {
       `<td class="layer ${l} ${S.pat[l].includes(s) ? "on" : ""}" data-layer="${l}" data-s="${s}">${S.pat[l].includes(s) ? "&bull;" : ""}</td>`).join("") + "</tr>";
   });
   g.innerHTML = h + "</table>";
-  g.onclick = e => {
+  // Act on the press, not on a click: while the sequencer runs the page redraws
+  // often, and a click needs press and release on the same element. The local
+  // state is updated at once, so a quick second press sees the new step.
+  g.onpointerdown = e => {
     const td = e.target.closest("td"); if (!td) return;
+    e.preventDefault();
     if (td.dataset.layer) { post("layer", { layer: td.dataset.layer, step: +td.dataset.s }); return; }
     const t = +td.dataset.t, s = +td.dataset.s, c = S.grid[t][s];
     if (track !== t) { track = t; buildTracks(); }
-    if (!c.on) { post("step", { track: t, step: s, action: "toggle", value: lastNote(t) }); selStep = { t, s }; }
-    else if (selStep && selStep.t === t && selStep.s === s) { post("step", { track: t, step: s, action: "clear" }); selStep = null; }
+    if (!c.on) { const n = lastNote(t); S.grid[t][s] = { on: true, n: [n] }; post("step", { track: t, step: s, action: "toggle", value: n }); selStep = { t, s }; }
+    else if (selStep && selStep.t === t && selStep.s === s) { S.grid[t][s] = { on: false }; post("step", { track: t, step: s, action: "clear" }); selStep = null; }
     else selStep = { t, s };
     buildStepEdit(); buildGrid();
   };
+}
+// markPlayhead moves the playing-step mark without redrawing the grid.
+function markPlayhead() {
+  const g = $("#grid"); if (!g) return;
+  g.querySelectorAll("td.play").forEach(td => td.classList.remove("play"));
+  if (S.playing) g.querySelectorAll(`td[data-t][data-s="${S.step}"]`).forEach(td => td.classList.add("play"));
 }
 function lastNote(t) { for (let s = S.grid[t].length - 1; s >= 0; s--) { const c = S.grid[t][s]; if (c.on && !c.off) return c.n[0]; } return 60; }
 const TRIGS = [["Amp", 1], ["Filter", 2], ["LFO", 4]];
@@ -470,7 +480,7 @@ function onState(s) {
     if (machChange || !$("#tracks").children.length) buildTracks(); else s.tracks.forEach((t, i) => $(`[data-mute="${i}"]`).classList.toggle("on", t.mute));
     if (tab === "seq") { buildBanks(); buildGrid(); buildStepEdit(); } else if (tab === "song" || tab === "waves" || (tab === "sound" && machChange)) build();
     else if (tab === "kit" && !document.activeElement.matches("input,select")) build();
-  } else if (tab === "seq" && s.playing) buildGrid();
+  } else if (tab === "seq") markPlayhead();
   if (tab === "sound" && !dragging) s.tracks[track].params.forEach((v, p) => {
     const r = document.querySelector(`input[data-p="${p}"]`); if (r && document.activeElement !== r) { r.value = v; $("#kv" + p).textContent = v; $("#kn" + p).textContent = note(s.tracks[track].machine, p, v); }
   });

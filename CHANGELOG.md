@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0-alpha
 
 - Release workflow (`.github/workflows/release.yml`): a `v*` tag tests, builds (Docker, cgo, linux/amd64), packages `monomodule.tar.gz` and publishes a GitHub Release, then updates `release.json`. Every push and pull request is also tested and built, and the package is kept as a workflow artifact.
 - The sync is MIDI by default (it was INT). The tempo follows Live: the MIDI clock while one arrives, otherwise the tempo from the PushHack Remote Script. Before, a tempo change in Live did nothing unless Live sent MIDI clock. The web page shows the tempo in use while Sync is MIDI. `Engine.LiveTempo`.

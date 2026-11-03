@@ -275,16 +275,26 @@ function buildGrid() {
       `<td class="layer ${l} ${S.pat[l].includes(s) ? "on" : ""}" data-layer="${l}" data-s="${s}">${S.pat[l].includes(s) ? "&bull;" : ""}</td>`).join("") + "</tr>";
   });
   g.innerHTML = h + "</table>";
-  g.onclick = e => {
+  // Act on the press, not on a click: while the sequencer runs the page redraws
+  // often, and a click needs press and release on the same element. The local
+  // state is updated at once, so a quick second press sees the new step.
+  g.onpointerdown = e => {
     const td = e.target.closest("td"); if (!td) return;
+    e.preventDefault();
     if (td.dataset.layer) { post("layer", { layer: td.dataset.layer, step: +td.dataset.s }); return; }
     const t = +td.dataset.t, s = +td.dataset.s, c = S.grid[t][s];
     if (track !== t) { track = t; buildTracks(); }
-    if (!c.on) { post("step", { track: t, step: s, action: "toggle", value: lastNote(t) }); selStep = { t, s }; }
-    else if (selStep && selStep.t === t && selStep.s === s) { post("step", { track: t, step: s, action: "clear" }); selStep = null; }
+    if (!c.on) { const n = lastNote(t); S.grid[t][s] = { on: true, n: [n] }; post("step", { track: t, step: s, action: "toggle", value: n }); selStep = { t, s }; }
+    else if (selStep && selStep.t === t && selStep.s === s) { S.grid[t][s] = { on: false }; post("step", { track: t, step: s, action: "clear" }); selStep = null; }
     else selStep = { t, s };
     buildStepEdit(); buildGrid();
   };
+}
+// markPlayhead moves the playing-step mark without redrawing the grid.
+function markPlayhead() {
+  const g = $("#grid"); if (!g) return;
+  g.querySelectorAll("td.play").forEach(td => td.classList.remove("play"));
+  if (S.playing) g.querySelectorAll(`td[data-t][data-s="${S.step}"]`).forEach(td => td.classList.add("play"));
 }
 function lastNote(t) { for (let s = S.grid[t].length - 1; s >= 0; s--) { const c = S.grid[t][s]; if (c.on && !c.off) return c.n[0]; } return 60; }
 const TRIGS = [["Amp", 1], ["Filter", 2], ["LFO", 4]];
@@ -403,23 +413,46 @@ function viewSys(v) {
   const c = S.config;
   v.innerHTML = `<div class="panel"><h2>Audio output</h2><div class="flex">
     <label>Output <select id="omode"><option value="stereo" ${c.output_mode !== "mono" ? "selected" : ""}>Stereo</option><option value="mono" ${c.output_mode === "mono" ? "selected" : ""}>Mono</option></select></label>
-    <label><span id="chlab"></span> <input id="coff" type="number" min="1" max="64" value="${c.channel_offset + 1}" style="width:70px"></label>
+    <label><span id="chlab"></span> <select id="coff"></select></label>
     <span class="lcd" id="livein"></span>
     <label>MIDI base channel <select id="cmid"><option value="-1" ${c.midi_channel < 0 ? "selected" : ""}>1 (default)</option>${[...Array(16)].map((_, i) => `<option value="${i}" ${c.midi_channel === i ? "selected" : ""}>${i + 1}</option>`).join("")}</select></label>
-    <label>PCM device <input id="cpcm" type="text" value="${c.pcm_device}" style="width:150px"></label>
+    <label>Audio output device <select id="cpcm"></select></label>
     <button id="csave">Apply</button></div>
-    <p class="note">Stereo writes left and right to two neighbouring channels; mono writes (L+R)/2 to one channel. Everything else on the card stays silent, so several modules can share it on different channels. The change applies at once. Then set the Live track's input to the name shown, or use the button below.
+    <p class="note" id="busnote"></p>
+    <p class="note">Everything else on the card stays silent, so several modules can share it on different channels. Then set the Live track's input to the name shown, or use the button below.
     Track n listens on MIDI channel (base + n - 1). CCs 16-71 on a track's channel set its parameters; on the base channel CC 112 is master volume, 113 tempo, 114 mute all.</p></div>
   <div class="panel"><h2>Ableton Live</h2><button id="ltr">Create the audio and MIDI tracks in Live</button><pre id="lres" class="note"></pre></div>
   <div class="panel"><h2>Project</h2><div class="flex"><a href="/api/project" download="monomodule-project.json"><button>Download project</button></a>
     <label>Restore <input type="file" id="pup" accept=".json"></label></div></div>`;
+  let bus = !!c.bus, off = c.channel_offset;
   const cap = () => {
-    const mono = $("#omode").value === "mono", off = Math.max(0, (+$("#coff").value || 1) - 1);
-    $("#chlab").textContent = mono ? "Channel" : "First channel";
-    $("#livein").textContent = "Live input: " + liveInput(mono ? "mono" : "stereo", off);
+    const mono = !bus && $("#omode").value === "mono";
+    $("#chlab").textContent = mono ? "Channel" : "Channel pair";
+    $("#livein").textContent = "Live input: " + liveInput(mono ? "mono" : "stereo", +$("#coff").value || 0);
   };
-  $("#omode").onchange = cap; $("#coff").oninput = cap; cap();
-  $("#csave").onclick = () => post("config", { output_mode: $("#omode").value, channel_offset: Math.max(0, +$("#coff").value - 1), midi_channel: +$("#cmid").value, pcm_device: $("#cpcm").value });
+  // The lists come from /api/audio, not the state: listing devices reads /proc.
+  const loadAudio = async () => {
+    const A = await (await fetch("/api/audio?mode=" + $("#omode").value)).json();
+    bus = A.bus;
+    for (const [id, list] of [["cpcm", A.devices], ["coff", A.channels]]) {
+      const el = $("#" + id); el.innerHTML = "";
+      list.forEach(o => { const e = new Option(o.label, o.value); e.selected = o.current; el.add(e); });
+    }
+    $("#cpcm").disabled = bus;
+    $("#omode").disabled = bus;
+    if (bus) $("#omode").value = "stereo";
+    $("#busnote").textContent = bus
+      ? "Audio mode: mixer. MonoModule plays through the audio mixer of push-audio-loopback, so other audio hacks (for example Braids) can play at the same time. The mixer owns the card and plays stereo pairs, so the Output mode and device lists are off. Pick a channel pair. Live still needs an audio track that listens to this pair: press Create the audio and MIDI tracks in Live, or set the tracks up yourself."
+      : "Audio mode: direct. No audio mixer was found, so MonoModule writes to the card itself. Only one audio hack can do this at a time. A newer push-audio-loopback with the audio mixer lets several hacks play together. Stereo writes left and right to two neighbouring channels; mono writes (L+R)/2 to one channel.";
+    cap();
+  };
+  $("#omode").onchange = () => { loadAudio().catch(() => {}); }; $("#coff").onchange = cap;
+  loadAudio().catch(() => {});
+  $("#csave").onclick = () => {
+    const q = { channel_offset: +$("#coff").value, midi_channel: +$("#cmid").value };
+    if (!bus) { q.output_mode = $("#omode").value; q.pcm_device = $("#cpcm").value; }
+    post("config", q);
+  };
   $("#ltr").onclick = async () => { try { const r = await (await api("live/tracks", {})).json(); $("#lres").textContent = (r.lines || r.Lines || []).join("\n"); } catch (_) {} };
   $("#pup").onchange = async e => { const f = e.target.files[0]; if (f) { const b = await f.text(); try { await fetch("/api/project", { method: "POST", body: b }); } catch (_) {} } };
 }
@@ -428,7 +461,7 @@ function viewSys(v) {
 function update() {
   if (!S) return;
   $("#play").classList.toggle("on", S.playing); $("#rec").classList.toggle("on", S.record);
-  if (document.activeElement !== $("#tempo")) $("#tempo").value = S.tempo.toFixed(1);
+  if (document.activeElement !== $("#tempo")) $("#tempo").value = (S.sync === 1 ? S.tempoNow : S.tempo).toFixed(1);
   $("#sync").value = S.sync;
   $("#posl").textContent = `${S.patternName}${S.next >= 0 ? ">" + patName(S.next) : ""} ${String(S.step + 1).padStart(2, "0")}/${String(S.pat.len).padStart(2, "0")}${S.pat.poly ? " POLY" : ""}`;
   $("#kitl").textContent = "K" + String(S.kit.n + 1).padStart(3, "0") + " " + S.kit.name;
@@ -447,7 +480,7 @@ function onState(s) {
     if (machChange || !$("#tracks").children.length) buildTracks(); else s.tracks.forEach((t, i) => $(`[data-mute="${i}"]`).classList.toggle("on", t.mute));
     if (tab === "seq") { buildBanks(); buildGrid(); buildStepEdit(); } else if (tab === "song" || tab === "waves" || (tab === "sound" && machChange)) build();
     else if (tab === "kit" && !document.activeElement.matches("input,select")) build();
-  } else if (tab === "seq" && s.playing) buildGrid();
+  } else if (tab === "seq") markPlayhead();
   if (tab === "sound" && !dragging) s.tracks[track].params.forEach((v, p) => {
     const r = document.querySelector(`input[data-p="${p}"]`); if (r && document.activeElement !== r) { r.value = v; $("#kv" + p).textContent = v; $("#kn" + p).textContent = note(s.tracks[track].machine, p, v); }
   });

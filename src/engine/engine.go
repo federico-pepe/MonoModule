@@ -96,6 +96,7 @@ type Engine struct {
 	extTarget float64
 	extLast   time.Time
 	extBPM    float64
+	liveBPM   float64 // Live's tempo from the Remote Script; used while no MIDI clock arrives
 
 	live [128]liveNote // notes being played that are recorded
 
@@ -645,11 +646,35 @@ func (e *Engine) Render(outL, outR []float32) {
 	}
 }
 
+// currentBPM is the tempo the sequencer and the tempo-synced delay run at: the
+// internal one, or with MIDI sync the measured MIDI clock, else Live's tempo
+// from the Remote Script, else the internal one.
 func (e *Engine) currentBPM() float64 {
-	if e.sync == SyncMIDI && e.extBPM > 0 {
-		return e.extBPM
+	if e.sync == SyncMIDI {
+		if e.extBPM > 0 {
+			return e.extBPM
+		}
+		if e.liveBPM > 0 {
+			return e.liveBPM
+		}
 	}
 	return e.bpm
+}
+
+// LiveTempo tells the engine Live's tempo, read from the PushHack Remote
+// Script. It is used while MIDI sync is on and no MIDI clock arrives (Live
+// sends none unless sync is enabled for the port, and none while stopped); a
+// clock that is still arriving wins. now is the time of the reading.
+func (e *Engine) LiveTempo(bpm float64, now time.Time) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if bpm < 20 || bpm > 999 || math.IsNaN(bpm) {
+		return
+	}
+	if e.extBPM > 0 && !e.extLast.IsZero() && now.Sub(e.extLast) > time.Second {
+		e.extBPM = 0 // the clock stopped; do not hold its last tempo
+	}
+	e.liveBPM = math.Min(300, math.Max(30, bpm))
 }
 
 func (e *Engine) primary(t int) *voice {

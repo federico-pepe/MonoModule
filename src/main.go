@@ -21,6 +21,8 @@ import (
 	"github.com/federico-pepe/ableton-push-hack/core/hackcfg"
 
 	"monomodule/engine"
+	"monomodule/livelink"
+	"monomodule/livesync"
 	"monomodule/store"
 	"monomodule/ui"
 )
@@ -91,8 +93,10 @@ func runModule() {
 	if a.pmURL == "" {
 		a.pmURL = defaultPushManagerURL
 	}
+	a.storeMirror(cfg)
 	a.status.set(false, msgNoCard)
 	a.eng = engine.New(44100)
+	a.eng.SetSync(engine.SyncMIDI) // follow Live (clock, or the Remote Script) by default
 	if a.st, err = store.Open(a.dataDir, a.eng); err != nil {
 		log.Fatalf("data folder: %v", err)
 	}
@@ -122,6 +126,7 @@ func runModule() {
 	go a.runSurface(ctx)
 	go a.runWeb(hcfg.Port, shutdown)
 	go a.superviseMIDI(shutdown)
+	go livesync.Run(shutdown, livelink.Call, a.eng)
 	a.superviseAudio(shutdown)
 
 	<-saved

@@ -15,9 +15,11 @@ MonoModule: a [push-hack](https://github.com/federico-pepe/ableton-push-hack) mo
 | `store/` | config, project.json, waves as WAV, imports folder, autosave | no |
 | `midimap/` | what notes/CCs mean (channel n = track n) | no |
 | `hwparams/` | parses Live's negotiated hw_params | no |
-| `livelink/` | PushHack Remote Script client (`track.ensure`) | no |
+| `livelink/` | PushHack Remote Script client (`track.ensure`, `transport.get`) | no |
+| `livesync/` | polls Live's transport (Remote Script) and joins/stops the sequencer on a change while sync is MIDI | no |
+| `audioout/` | what the web page offers for the output: devices, channels or pairs | no |
 | `cmd/mmrender/`, `cmd/mmscreens/` | demo/tour WAV; Push screen PNGs | no |
-| main package | `main.go` (supervisor re-exec, `MONO_SUPERVISED`), `audio.go`/`pcm.go`/`bridge.c` (cgo ALSA playback), `midi.go` (port "MonoModule MIDI In"), `surface.go`, `web.go` + `web/index.html`, `app.go` | yes (cgo + libasound) |
+| main package | `main.go` (supervisor re-exec, `MONO_SUPERVISED`), `audio.go` (supervisor, direct card path), `bus.go` (audio bus client), `pcm.go`/`bridge.c` (cgo ALSA playback, direct path only), `midi.go` (port "MonoModule MIDI In"), `surface.go`, `web.go` + `web/index.html`, `app.go` | yes (cgo + libasound) |
 
 Design notes: voices hold their generators in one struct (no interfaces, no allocation); parameters resolve at control rate (32 samples); a track's FX chain is FX machine, filter-page, EQ, SRR, delay; FX machines take lower-numbered tracks by source mask; `Render` splits blocks at step and arp events. Parameter locks use a uint64 mask over 56 params.
 
@@ -25,9 +27,11 @@ Design notes: voices hold their generators in one struct (no interfaces, no allo
 
 - Never write the display shm directly: frames go through `pmclient.Push` while the app owns the surface; LEDs go through `POST /api/midi/led`.
 - On-screen text is ASCII only. Never hardcode ports (`hack.json` "port" 7712 is only a default).
-- Push controls count only while focused (`app.focus`), and only from Push 3 client 16 port 0, channel 0 for CCs.
+- Push controls count only while focused (`app.focus`), and only from Push 3's Live Port (port 0, channel 0 for CCs). Its client number is looked up by name with `alsaseq.Push3` before each subscribe: it is 16 only while Push 3 is ALSA card 0, and 20 when the loopback card is card 0. Never pin `Push3ClientDefault`.
 - The render goroutine is pinned (`LockOSThread`, SCHED_FIFO); keep it allocation-free (`TestRenderAllocFree`).
-- Open `hw:PHVAudio,1,0` with the params Live negotiated (`hwparams`), S16_LE interleaved, channel pair at `channel_offset`.
+- Audio goes through the push-audio-loopback mixer when one answers on the bus socket (`bus.go`, `core/audiobus`): float stereo blocks to the mixer, which owns the card and the channel pair (`bus_pair` in the config, -1 = the mixer chooses). The mixer plays pairs only, so `output_mode` (stereo/mono) and `pcm_device` apply to the direct path. Without a mixer: open `hw:PHVAudio,1,0` with the params Live negotiated (`hwparams`), S16_LE interleaved, channels at `channel_offset` per `output_mode` (`outmix`). `superviseAudio` switches by itself. Design: `docs/audio-bus.md` in ableton-push-hack.
+- `core/audiobus` and `alsaseq.Push3` come from `core/v0.5.4` (pinned in `src/go.mod`). It needs push-audio-loopback 0.2.0-alpha or later for bus mode.
+- Create tracks must never switch the user's channel; `livelink.EnsureTracks` reports what Live offers. MonoModule keeps its MIDI track (notes play the tracks).
 
 ## Build and test
 
@@ -43,4 +47,4 @@ Bump `hack.json` "version", tag `v<version>`, push the tag. The workflow checks 
 
 ## Not verified on hardware
 
-The Push/Live/loopback integration has only been compile-checked and smoke-tested off device. Check first on a Push: the audio session opens and sounds; Home focus/blur; LED updates; pad and encoder mapping; Remote Script track creation. Also: the binary links dynamically (`--dynamic-linker=/lib/ld-linux-x86-64.so.2`, as braids verified); the framework's PUBLISHING.md recommends static linking, so confirm which the target needs. The name "Monomodule" is also used by another project; check the catalog for clashes before publishing.
+The Push/Live/loopback integration has only been compile-checked and smoke-tested off device. The bus client (`bus.go`) has a test against a real `core/audiobus` server (`TestBusPath`), and the same client code ran on a Push 3 in MachineModule and Braids, but MonoModule has not been run with the mixer on a device. Check first on a Push: the audio session opens and sounds; Home focus/blur; LED updates; pad and encoder mapping; Remote Script track creation. Also: the binary links dynamically (`--dynamic-linker=/lib/ld-linux-x86-64.so.2`, as braids verified); the framework's PUBLISHING.md recommends static linking, so confirm which the target needs. The name "Monomodule" is also used by another project; check the catalog for clashes before publishing.

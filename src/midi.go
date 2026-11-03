@@ -34,11 +34,9 @@ func cardPresent(id string) bool {
 // are safe to call from there.
 type midiHandler struct{ a *app }
 
-func isPush(src alsaseq.Addr) bool { return src.Client == alsaseq.Push3ClientDefault }
-
 func (h *midiHandler) Fixed(ev uint8, src alsaseq.Addr, data []byte) {
 	a := h.a
-	push := isPush(src)
+	push := a.push3.Is(src)
 	ch := int(data[0] & 0x0F)
 	switch ev {
 	case alsaseq.EvClock:
@@ -58,7 +56,7 @@ func (h *midiHandler) Fixed(ev uint8, src alsaseq.Addr, data []byte) {
 	if push {
 		// Only Push's own control port drives the panel, and only while the
 		// app has the surface; everything else it sends belongs to Live.
-		if src.Port != alsaseq.Push3PortDefault || !a.focus.Load() {
+		if !a.push3.IsLivePort(src) || !a.focus.Load() {
 			return
 		}
 		switch ev {
@@ -142,7 +140,6 @@ func (h *midiHandler) VarLen(uint8, alsaseq.Addr, []byte) {}
 // superviseMIDI opens the port and subscribes it to Push 3's control port,
 // retrying until it works.
 func (a *app) superviseMIDI(shutdown <-chan struct{}) {
-	pinned := alsaseq.Addr{Client: alsaseq.Push3ClientDefault, Port: alsaseq.Push3PortDefault}
 	for {
 		seq, err := alsaseq.Open()
 		if err == nil {
@@ -166,6 +163,9 @@ func (a *app) superviseMIDI(shutdown <-chan struct{}) {
 		}()
 		log.Printf("%s open", midiPortName)
 		for {
+			// The client number moves with the sound cards (20, not 16, when the
+			// loopback card is card 0): look Push 3 up on every attempt.
+			pinned := a.push3.Refresh()
 			if err := seq.Subscribe(pinned); err == nil {
 				log.Printf("subscribed to Push 3 %v", pinned)
 				break

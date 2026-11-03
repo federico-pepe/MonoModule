@@ -3,6 +3,7 @@ package engine
 import (
 	"math"
 	"testing"
+	"time"
 )
 
 const sr = 44100
@@ -360,5 +361,74 @@ func TestWAVUserWave(t *testing.T) {
 	}
 	if u, _ := e.WaveMemory(); u != 2000 {
 		t.Fatalf("memory %d", u)
+	}
+}
+
+func TestExtJoinStartsAtLivesPosition(t *testing.T) {
+	e := New(44100)
+	e.ExtJoin(1) // sync is internal: ignored
+	if e.Playing() {
+		t.Fatal("joined with internal sync")
+	}
+	e.SetSync(SyncMIDI)
+	e.ExtJoin(-1)
+	if e.Playing() {
+		t.Fatal("joined at a negative beat")
+	}
+	// 16 steps of 1/16 note = 4 beats; beat 5.5 is 1.5 beats into the pattern:
+	// the next step to fire is step 6 (0-based), after the one at 1.5 beats.
+	e.ExtJoin(5.5)
+	if !e.Playing() {
+		t.Fatal("not playing after join")
+	}
+	pos := e.Position()
+	wantTick := 1.5 * TicksPerBeat
+	if math.Abs(pos.Tick-wantTick) > 1e-6 {
+		t.Fatalf("tick = %g, want %g", pos.Tick, wantTick)
+	}
+	if pos.Step != 5 {
+		t.Fatalf("step = %d, want 5 (the last one before 1.5 beats)", pos.Step)
+	}
+	// joining again while playing changes nothing
+	e.ExtJoin(9)
+	if got := e.Position().Tick; math.Abs(got-wantTick) > 1e-6 {
+		t.Fatalf("second join moved the tick to %g", got)
+	}
+	// a stop from Live ends it
+	e.ExtStop()
+	if e.Playing() {
+		t.Fatal("still playing after stop")
+	}
+}
+
+func TestLiveTempoDrivesTheClockWithoutMidiPulses(t *testing.T) {
+	e := New(44100)
+	e.LiveTempo(90, time.Unix(1000, 0))
+	if e.Tempo() != 120 {
+		t.Fatalf("internal sync must keep its own tempo, got %g", e.Tempo())
+	}
+	e.SetSync(SyncMIDI)
+	e.LiveTempo(90, time.Unix(1000, 0))
+	if e.Tempo() != 90 {
+		t.Fatalf("tempo = %g, want Live's 90", e.Tempo())
+	}
+	e.LiveTempo(133.5, time.Unix(1001, 0))
+	if e.Tempo() != 133.5 {
+		t.Fatalf("tempo = %g after Live changed it", e.Tempo())
+	}
+	// a MIDI clock that is arriving wins over the reading
+	now := time.Unix(2000, 0)
+	for i := 0; i < 60; i++ {
+		e.ExtPulse(now)
+		now = now.Add(17857142 * time.Nanosecond) // 140 BPM
+	}
+	e.LiveTempo(100, now)
+	if math.Abs(e.Tempo()-140) > 3 {
+		t.Fatalf("tempo = %g, want the clock's 140", e.Tempo())
+	}
+	// ... but a clock that stopped does not hold its last tempo
+	e.LiveTempo(100, now.Add(3*time.Second))
+	if e.Tempo() != 100 {
+		t.Fatalf("tempo = %g after the clock stopped, want 100", e.Tempo())
 	}
 }

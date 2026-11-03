@@ -4,7 +4,11 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/federico-pepe/ableton-push-hack/core/alsaseq"
+	"github.com/federico-pepe/ableton-push-hack/core/audiobus"
+
 	"monomodule/engine"
+	"monomodule/outmix"
 	"monomodule/store"
 	"monomodule/ui"
 )
@@ -23,7 +27,18 @@ type app struct {
 	cfg   store.Config
 
 	status audioStatus
-	focus  atomic.Bool // MonoModule owns the Push surface
+	// channels is what Live negotiated on the card; 0 until it has.
+	channels atomic.Int32
+	// offset and mono mirror cfg.ChannelOffset and cfg.OutputMode for the
+	// render loop, which must not lock.
+	offset atomic.Int32
+	mono   atomic.Bool
+	// busClient talks to the audio mixer (audiobus); busMode says it is in use.
+	busClient atomic.Pointer[audiobus.Client]
+	busMode   atomic.Bool
+	// push3 is where Push 3's Live Port is; its client number moves.
+	push3 alsaseq.Push3
+	focus atomic.Bool // MonoModule owns the Push surface
 }
 
 func (a *app) config() store.Config {
@@ -36,8 +51,15 @@ func (a *app) setConfig(f func(*store.Config)) error {
 	a.cfgMu.Lock()
 	f(&a.cfg)
 	c := a.cfg
+	a.storeMirror(c)
 	a.cfgMu.Unlock()
 	return store.SaveConfig(a.hackDir, c)
+}
+
+// storeMirror copies the settings the render loop reads without a lock.
+func (a *app) storeMirror(c store.Config) {
+	a.offset.Store(int32(c.ChannelOffset))
+	a.mono.Store(c.OutputMode == outmix.Mono)
 }
 
 // ---- ui.Host ----

@@ -1,6 +1,9 @@
 package outmix
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func TestFit(t *testing.T) {
 	for _, c := range []struct {
@@ -83,5 +86,14 @@ func TestClipping(t *testing.T) {
 func TestWidthValid(t *testing.T) {
 	if Width(Mono) != 1 || Width(Stereo) != 2 || Width("x") != 2 || Valid("x") || !Valid(Mono) {
 		t.Fatal()
+	}
+}
+
+func TestMixNaNIsSilence(t *testing.T) {
+	nan := float32(math.NaN())
+	wide := make([]int16, 4)
+	Mix(wide, []float32{nan, 0.5}, []float32{nan, 0.5}, 2, 0, Stereo)
+	if wide[0] != 0 || wide[1] != 0 || wide[2] == 0 {
+		t.Fatalf("%v", wide)
 	}
 }

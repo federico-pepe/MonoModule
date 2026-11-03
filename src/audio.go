@@ -16,6 +16,9 @@ const (
 	msgNoCard    = "No loopback card.\nInstall push-audio-loopback."
 	msgNoLive    = "1. Push Audio Settings > Devices.\n2. Enable an input of the\n   Push Hack Virtual Audio card.\n3. Set an audio track's input to it\n   and turn Monitor on."
 	realtimePrio = 50
+	// maxWriteErrors in a row end a session: the device is gone, not just
+	// underrunning, and superviseAudio reopens it.
+	maxWriteErrors = 100
 )
 
 // session is one open PCM stream and the goroutine that renders into it.
@@ -55,7 +58,8 @@ func (a *app) render(s *session, rate int) {
 	period, ch := s.pcm.Period(), s.pcm.Channels()
 	l, r := make([]float32, period), make([]float32, period)
 	wide := make([]int16, period*ch)
-	var blocks, failed int
+	var blocks, failed, streak int
+	blockDur := time.Duration(period) * time.Second / time.Duration(rate)
 	for {
 		select {
 		case <-s.stop:
@@ -64,13 +68,22 @@ func (a *app) render(s *session, rate int) {
 		default:
 		}
 		a.eng.Render(l, r)
-		cfg := a.config()
-		mode, off := outmix.Fit(cfg.OutputMode, cfg.ChannelOffset, ch)
+		mode := outmix.Stereo
+		if a.mono.Load() {
+			mode = outmix.Mono
+		}
+		mode, off := outmix.Fit(mode, int(a.offset.Load()), ch)
 		outmix.Mix(wide, l, r, ch, off, mode)
 		if s.pcm.Write(wide, period) < 0 {
 			failed++
+			if streak++; streak >= maxWriteErrors {
+				log.Printf("audio: %d write errors in a row; closing the device", streak)
+				return
+			}
+			time.Sleep(blockDur) // a failed write returns at once; do not spin
 			continue
 		}
+		streak = 0
 		blocks++
 	}
 }
@@ -89,6 +102,14 @@ func (a *app) superviseAudio(shutdown <-chan struct{}) {
 		}
 	}
 	defer stop()
+	var bsess *busSession
+	stopBus := func() {
+		if bsess != nil {
+			bsess.close()
+			bsess = nil
+		}
+	}
+	defer stopBus()
 	lastState := ""
 	note := func(s string) {
 		if s != lastState {
@@ -101,6 +122,35 @@ func (a *app) superviseAudio(shutdown <-chan struct{}) {
 		case <-shutdown:
 			return
 		default:
+		}
+		if sess != nil {
+			select {
+			case <-sess.done: // render gave up; open a fresh one below
+				log.Print("audio session ended; reopening")
+				sess = nil
+			default:
+			}
+		}
+		if c := a.busClient.Load(); (c != nil && c.Connected()) || busUp() {
+			// A mixer owns the card: play through it, not through hw:.
+			stop()
+			if !a.busMode.Swap(true) {
+				note("audio mixer found; playing through the audio bus")
+			}
+			wait := a.busStep(&bsess)
+			select {
+			case <-shutdown:
+				return
+			case <-time.After(wait):
+			}
+			continue
+		}
+		if a.busMode.Swap(false) {
+			stopBus()
+			if c := a.busClient.Swap(nil); c != nil {
+				c.Close()
+			}
+			note("audio mixer gone; playing to the card directly")
 		}
 		wait := pollWaiting
 		hp, ok, err := hwparams.Read(cardID)
@@ -119,6 +169,7 @@ func (a *app) superviseAudio(shutdown <-chan struct{}) {
 			}
 			stop()
 		default:
+			a.channels.Store(int32(hp.Channels))
 			dev := a.config().PCMDevice
 			if sess == nil || hp != last || dev != lastDev {
 				stop()

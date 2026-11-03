@@ -4,6 +4,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/federico-pepe/ableton-push-hack/core/alsaseq"
 	"github.com/federico-pepe/ableton-push-hack/core/audiobus"
 
 	"monomodule/engine"
@@ -35,7 +36,9 @@ type app struct {
 	// busClient talks to the audio mixer (audiobus); busMode says it is in use.
 	busClient atomic.Pointer[audiobus.Client]
 	busMode   atomic.Bool
-	focus     atomic.Bool // MonoModule owns the Push surface
+	// push3 is where Push 3's Live Port is; its client number moves.
+	push3 alsaseq.Push3
+	focus atomic.Bool // MonoModule owns the Push surface
 }
 
 func (a *app) config() store.Config {

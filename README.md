@@ -44,7 +44,7 @@ make smoke    # off-device test of the audio path and web API
 scripts/deploy.sh <push-host>
 ```
 
-`go.sum` is not committed; `make` runs `go mod tidy` in the container. `core/audiobus` comes from `core/v0.5.3`, pinned in `src/go.mod`.
+`go.sum` is not committed; `make` runs `go mod tidy` in the container. `core/audiobus` and `alsaseq.Push3` come from `core/v0.5.4`, pinned in `src/go.mod`.
 
 ## Use
 

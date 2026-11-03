@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Finds Push 3 by name instead of assuming ALSA client 16. With the loopback card as ALSA card 0, Push 3 is client 20, and the pads, buttons and encoders did nothing (the log repeated `SUBSCRIBE_PORT ioctl: invalid argument`).
 - Plays through the audio mixer of push-audio-loopback (audio bus) when it runs, so other audio hacks can play at the same time. Without the mixer it writes to the card directly, as before. Needs push-audio-loopback 0.2.0-alpha or later for this mode.
 - Web page (System tab): the channel (or pair) and the audio output device are dropdowns now, listed from the card and the system.
 - Create tracks in Live no longer switches your channel to the one input Live offers; it reports what Live offers.

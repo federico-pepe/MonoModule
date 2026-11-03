@@ -39,7 +39,7 @@ Design notes: voices hold their generators in one struct (no interfaces, no allo
 
 ## Release
 
-Bump `hack.json` "version", tag `v<version>`, push the tag. The workflow checks they match, tests, builds, packages `monomodule.tar.gz` (top directory `monomodule/`) and commits `release.json`. Add `catalog-entry.json` to the framework's `catalog/catalog.json`.
+Bump `hack.json` "version", tag `v<version>`, push the tag. The workflow checks they match, tests, builds, packages `monomodule.tar.gz` (top directory `monomodule/`) and commits `release.json`. `.github/workflows/release.yml` also tests and builds every push and pull request (Docker, cgo) and keeps the package as a workflow artifact, so a build can be tried before tagging; only a `v*` tag publishes the Release. Add `catalog-entry.json` to the framework's `catalog/catalog.json`.
 
 ## Not verified on hardware
 

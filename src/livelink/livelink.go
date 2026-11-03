@@ -202,3 +202,23 @@ func Friendly(what string, err error) error {
 	}
 	return fmt.Errorf("%s: %w (is the PushHack Remote Script selected in Live?)", what, err)
 }
+
+// Transport is Live's transport, from the Remote Script's transport.get.
+type Transport struct {
+	Playing bool    `json:"playing"`
+	Tempo   float64 `json:"tempo"`
+	Beat    float64 `json:"beat"` // song position in quarter notes
+}
+
+// ReadTransport asks Live whether it is playing and where.
+func ReadTransport(call Caller) (Transport, error) {
+	var t Transport
+	data, err := call("transport", "get", nil)
+	if err != nil {
+		return t, Friendly("transport", err)
+	}
+	if err := json.Unmarshal(data, &t); err != nil {
+		return t, fmt.Errorf("transport: %w", err)
+	}
+	return t, nil
+}

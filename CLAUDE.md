@@ -15,7 +15,8 @@ MonoModule: a [push-hack](https://github.com/federico-pepe/ableton-push-hack) mo
 | `store/` | config, project.json, waves as WAV, imports folder, autosave | no |
 | `midimap/` | what notes/CCs mean (channel n = track n) | no |
 | `hwparams/` | parses Live's negotiated hw_params | no |
-| `livelink/` | PushHack Remote Script client (`track.ensure`) | no |
+| `livelink/` | PushHack Remote Script client (`track.ensure`, `transport.get`) | no |
+| `livesync/` | polls Live's transport (Remote Script) and joins/stops the sequencer on a change while sync is MIDI | no |
 | `audioout/` | what the web page offers for the output: devices, channels or pairs | no |
 | `cmd/mmrender/`, `cmd/mmscreens/` | demo/tour WAV; Push screen PNGs | no |
 | main package | `main.go` (supervisor re-exec, `MONO_SUPERVISED`), `audio.go` (supervisor, direct card path), `bus.go` (audio bus client), `pcm.go`/`bridge.c` (cgo ALSA playback, direct path only), `midi.go` (port "MonoModule MIDI In"), `surface.go`, `web.go` + `web/index.html`, `app.go` | yes (cgo + libasound) |

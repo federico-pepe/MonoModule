@@ -451,7 +451,7 @@ function viewSys(v) {
 function update() {
   if (!S) return;
   $("#play").classList.toggle("on", S.playing); $("#rec").classList.toggle("on", S.record);
-  if (document.activeElement !== $("#tempo")) $("#tempo").value = S.tempo.toFixed(1);
+  if (document.activeElement !== $("#tempo")) $("#tempo").value = (S.sync === 1 ? S.tempoNow : S.tempo).toFixed(1);
   $("#sync").value = S.sync;
   $("#posl").textContent = `${S.patternName}${S.next >= 0 ? ">" + patName(S.next) : ""} ${String(S.step + 1).padStart(2, "0")}/${String(S.pat.len).padStart(2, "0")}${S.pat.poly ? " POLY" : ""}`;
   $("#kitl").textContent = "K" + String(S.kit.n + 1).padStart(3, "0") + " " + S.kit.name;

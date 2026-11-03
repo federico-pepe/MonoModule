@@ -385,6 +385,34 @@ func (e *Engine) ExtStart() {
 	e.extTarget = 0
 }
 
+// ExtJoin starts the sequencer in the middle of a song: Live was already
+// playing when MonoModule came up, so no MIDI Start arrived. beat is Live's
+// song position in quarter notes. The pattern starts where it would be had it
+// been started with Live at beat 0, so the grids line up. The MIDI clock
+// pulses that follow keep it there. Ignored unless sync is MIDI, or when the
+// sequencer is already playing.
+func (e *Engine) ExtJoin(beat float64) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.sync != SyncMIDI || e.playing || beat < 0 || math.IsNaN(beat) || math.IsInf(beat, 0) {
+		return
+	}
+	e.startLocked()
+	if !e.playing { // an empty song: nothing to play
+		return
+	}
+	pat := e.proj.Pattern(e.curPat)
+	total := e.fireTime(pat, pat.Len)
+	pos := math.Mod(beat*TicksPerBeat, total)
+	k := 0
+	for k < pat.Len && e.fireTime(pat, k) < pos-1e-6 {
+		k++
+	}
+	e.tick, e.nextStep = pos, k
+	e.playStep = clampi(k-1, 0, pat.Len-1)
+	e.extTicks, e.extTarget = pos, pos
+}
+
 // ExtContinue is MIDI Continue.
 func (e *Engine) ExtContinue() {
 	e.mu.Lock()

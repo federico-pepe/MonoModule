@@ -83,7 +83,9 @@ Without the mixer, MonoModule writes to the card itself: choose the device, the 
 
 ## MIDI
 
-External notes: MIDI channel *n* (from the base channel, default 1) plays track *n* at pitch; pitch bend on the base channel bends all tracks +-2 semitones. CCs 16-71 on a track's channel set parameters 1-56 of that track. On the base channel: CC 112 master volume, 113 tempo (30-157), 114 mute all (127) / unmute (0). CC 123 stops all notes. Program change selects a pattern. MIDI clock, start, continue and stop are followed when the sync is MIDI (Settings > SYSTEM, or the web page).
+External notes: MIDI channel *n* (from the base channel, default 1) plays track *n* at pitch; pitch bend on the base channel bends all tracks +-2 semitones. CCs 16-71 on a track's channel set parameters 1-56 of that track. On the base channel: CC 112 master volume, 113 tempo (30-157), 114 mute all (127) / unmute (0). CC 123 stops all notes. Program change selects a pattern. MIDI clock, start, continue and stop are followed when the sync is MIDI (Settings > SYSTEM, or the web page). The sync is MIDI by default and is not saved; set it to INT for the sequencer's own tempo.
+
+MIDI Start only reaches MonoModule at the moment Live starts. So that it also follows when Live is already playing (you opened MonoModule, or switched the sync to MIDI, in the middle of a song), MonoModule asks the PushHack Remote Script in Live whether it plays and where. When Live changes from stopped to playing, the sequencer joins at Live's position (the pattern lines up with Live's beats as if it had started with Live at beat 0). When Live stops, it stops. The tempo follows Live too: from the MIDI clock while it arrives, and otherwise from the Remote Script (Live sends no clock unless you turn on Sync for MonoModule's MIDI port, and none while it is stopped), so a tempo change in Live reaches the sequencer and the tempo-synced delay either way. It only reacts to a change of Live's transport, so a sequencer you started by hand stays on until Live stops after playing. Without the Remote Script, only MIDI Start, Stop and the clock work.
 
 ## Differences from the Monomachine
 

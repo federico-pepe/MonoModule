@@ -112,7 +112,7 @@ func (w *webServer) state() map[string]any {
 	return map[string]any{
 		"playing": pos.Playing, "step": pos.Step, "pattern": pos.Pattern, "editPattern": e.CurrentPattern(),
 		"patternName": engine.PatternName(pos.Pattern), "next": pos.Next,
-		"tempo": e.InternalTempo(), "record": e.Recording(), "sync": int(e.Sync()),
+		"tempo": e.InternalTempo(), "tempoNow": e.Tempo(), "record": e.Recording(), "sync": int(e.Sync()),
 		"song": map[string]any{"on": songOn, "n": song, "row": pos.Row, "rows": rows, "loop": loop},
 		"kit":  map[string]any{"n": e.KitNumber(), "name": e.KitName()},
 		"pat": map[string]any{"len": pat.Len, "scale": pat.Scale, "swingAmt": pat.SwingAmt, "kit": pat.Kit,

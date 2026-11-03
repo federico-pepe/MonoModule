@@ -1,0 +1,91 @@
+name: Release
+
+# Every push and pull request is built and tested. A v* tag also publishes a
+# GitHub Release, which Push Manager on the device reads. Without a tag the
+# package is kept as a workflow artifact, so the build can be tried first.
+
+on:
+  push:
+    branches: ['**']
+    tags:
+      - 'v*'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify version match
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          MODULE_VERSION=$(grep '"version"' hack.json | head -1 | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+          if [ "$TAG_VERSION" != "$MODULE_VERSION" ]; then
+            echo "ERROR: Tag version ($TAG_VERSION) does not match hack.json version ($MODULE_VERSION)"
+            echo "Update hack.json to version $TAG_VERSION before tagging."
+            exit 1
+          fi
+          echo "Version check passed: $TAG_VERSION"
+
+      # cgo (libasound) needs a real linux/amd64 environment with
+      # libasound2-dev; a bare `go build` on the runner would link against the
+      # runner's glibc and not run on Push 3's AbletonOS. Build inside the
+      # same Docker image the Makefile uses. Only src/ is mounted, so the
+      # build output lands inside it and is moved out afterwards; chmod runs
+      # in the container because the output is root-owned there.
+      - name: Test and build (cgo, via Docker)
+        run: |
+          mkdir -p dist/monomodule
+          docker run --rm --platform linux/amd64 \
+            -v "$PWD/src":/work -w /work golang:1.25-bookworm \
+            sh -c "apt-get update -qq && apt-get install -qq -y libasound2-dev >/dev/null && \
+              go mod tidy && go vet ./... && go test -race ./... && \
+              CGO_ENABLED=1 go build -ldflags '-s -w -linkmode external -extldflags -Wl,--dynamic-linker=/lib/ld-linux-x86-64.so.2' -o /work/monomodule . && \
+              chmod +x /work/monomodule"
+          mv src/monomodule dist/monomodule/monomodule
+          cp hack.json dist/monomodule/hack.json
+
+      - name: Package
+        run: tar -czf monomodule.tar.gz -C dist monomodule
+
+      - name: Keep the package (no tag)
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: monomodule
+          path: monomodule.tar.gz
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: monomodule.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit release.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          RELEASED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git fetch origin main
+          git checkout -f main
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          cat > release.json << EOF
+          {
+            "version": "${VERSION}",
+            "download_url": "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/monomodule.tar.gz",
+            "released_at": "${RELEASED_AT}"
+          }
+          EOF
+          git add release.json
+          git commit -m "chore: update release.json for ${{ github.ref_name }}" || echo "No changes to commit"
+          git push origin main

@@ -89,20 +89,6 @@ func ParsePair(name string) (int, bool) {
 	return a - 1, true
 }
 
-// OnlyPair is the one stereo pair among the offered names, if there is exactly one.
-func OnlyPair(options []string) (string, bool) {
-	found := ""
-	for _, o := range options {
-		if _, ok := ParsePair(o); ok {
-			if found != "" {
-				return "", false
-			}
-			found = o
-		}
-	}
-	return found, found != ""
-}
-
 // ChannelName is Live's name for the input at 0-based offset: "3" for mono,
 // "3/4" for a stereo pair.
 func ChannelName(offset int, mono bool) string {
@@ -126,27 +112,6 @@ func ParseMono(name string) (int, bool) {
 	return n - 1, true
 }
 
-// OnlyChannel is the one offered input of the wanted kind (pair or mono), if
-// there is exactly one.
-func OnlyChannel(options []string, mono bool) (name string, offset int, ok bool) {
-	for _, o := range options {
-		var off int
-		var good bool
-		if mono {
-			off, good = ParseMono(o)
-		} else {
-			off, good = ParsePair(o)
-		}
-		if good {
-			if name != "" {
-				return "", 0, false
-			}
-			name, offset = o, off
-		}
-	}
-	return name, offset, name != ""
-}
-
 func routing(e *Error) (what string, options []string) {
 	var d struct {
 		What    string   `json:"what"`
@@ -162,10 +127,10 @@ type Result struct {
 }
 
 // EnsureTracks makes an audio track that reads the module's input (a pair or
-// a single channel) and a MIDI track that plays into MonoModule. If Live
-// offers exactly one input of the wanted kind, that is the one the user
-// enabled, and setOutput switches the module to it.
-func EnsureTracks(call Caller, offset int, mono bool, setOutput func(offset int, mono bool) error) (Result, error) {
+// a single channel) and a MIDI track that plays into MonoModule. It never
+// changes the module's output: if Live does not offer the input, the error
+// names what Live offers, and the user picks one of those on the web page.
+func EnsureTracks(call Caller, offset int, mono bool) (Result, error) {
 	var res Result
 	audio := map[string]any{
 		"kind": "audio", "name": AudioTrack,
@@ -175,18 +140,8 @@ func EnsureTracks(call Caller, offset int, mono bool, setOutput func(offset int,
 	data, err := call("track", "ensure", audio)
 	var pe *Error
 	if errors.As(err, &pe) && pe.Code == "bad_routing" {
-		what, opts := routing(pe)
-		if what == "channel" {
-			only, off, ok := OnlyChannel(opts, mono)
-			if !ok {
-				return res, fmt.Errorf("Live does not offer input %s on Ext. In (it offers: %s). Enable the Push Hack Virtual Audio card in Push's audio preferences", ChannelName(offset, mono), strings.Join(opts, ", "))
-			}
-			if serr := setOutput(off, mono); serr != nil {
-				return res, serr
-			}
-			res.Lines = append(res.Lines, fmt.Sprintf("MonoModule now writes to input %s, the one Live offers.", only))
-			audio["input_channel"] = []string{only}
-			data, err = call("track", "ensure", audio)
+		if what, opts := routing(pe); what == "channel" {
+			return res, fmt.Errorf("Live does not offer input %s on Ext. In (it offers: %s). Enable that input of the Push Hack Virtual Audio card in Push's audio preferences, or pick a channel MonoModule can use", ChannelName(offset, mono), strings.Join(opts, ", "))
 		}
 	}
 	if err != nil {

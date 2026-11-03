@@ -21,6 +21,9 @@ type Config struct {
 	// ChannelOffset is the first channel (0-based) on the card: stereo 2 is
 	// channels 3/4, mono 2 is channel 3.
 	ChannelOffset int `json:"channel_offset"`
+	// BusPair is the pair asked of the audio mixer, or -1 to let the mixer
+	// choose and remember one. The mixer always plays a stereo pair.
+	BusPair int `json:"bus_pair"`
 	// MidiChannel is the base channel (0-15): track n listens on base+n-1. -1 means
 	// the default, channel 1.
 	MidiChannel int `json:"midi_channel"`
@@ -30,7 +33,7 @@ type Config struct {
 
 // DefaultConfig is a fresh install.
 func DefaultConfig() Config {
-	return Config{PCMDevice: "hw:PHVAudio,1,0", OutputMode: outmix.Stereo, MidiChannel: -1}
+	return Config{PCMDevice: "hw:PHVAudio,1,0", OutputMode: outmix.Stereo, BusPair: -1, MidiChannel: -1}
 }
 
 // LoadConfig reads the config; a missing file is the defaults.
@@ -51,6 +54,9 @@ func LoadConfig(dir string) (Config, error) {
 	}
 	if c.ChannelOffset < 0 || c.ChannelOffset > 63 {
 		c.ChannelOffset = 0
+	}
+	if c.BusPair < -1 || c.BusPair > 62 {
+		c.BusPair = -1
 	}
 	if c.MidiChannel < -1 || c.MidiChannel > 15 {
 		c.MidiChannel = -1

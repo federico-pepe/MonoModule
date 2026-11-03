@@ -8,7 +8,7 @@ It follows the Monomachine's *model*: six tracks, 22 machines, a cascaded high-p
 
 ## Status: alpha, not verified on hardware
 
-Everything that can run without a Push has been tested here (engine, sequencer, panel, project files, MIDI map, web API, the cgo audio path against a stand-in for libasound). **The integration with a real Push 3, Ableton Live and the loopback card has not been run**: Home focus/blur, LED updates, pad and encoder mapping, the audio session on `hw:PHVAudio,1,0` and track creation through the Remote Script are written from the patterns of other Push Hack modules and compile-checked only. See [CLAUDE.md](CLAUDE.md) for what to check first on a device.
+Everything that can run without a Push has been tested here (engine, sequencer, panel, project files, MIDI map, web API, the cgo audio path against a stand-in for libasound). **The integration with a real Push 3, Ableton Live and the loopback card has not been run**: Home focus/blur, LED updates, pad and encoder mapping, the audio session on `hw:PHVAudio,1,0` and track creation through the Remote Script are written from the patterns of other Push Hack modules and compile-checked only. The audio mixer client (below) is tested off device against a real `core/audiobus` server; the same client code ran on a Push 3 in MachineModule and Braids, but MonoModule itself has not. See [CLAUDE.md](CLAUDE.md) for what to check first on a device.
 
 ## What you get
 
@@ -23,7 +23,15 @@ Everything that can run without a Push has been tested here (engine, sequencer, 
 
 ## Requirements
 
-[push-audio-loopback](https://github.com/federico-pepe/ableton-push-hack) (the virtual audio card), push-manager and push-display, and the PushHack Remote Script in Live (to create the tracks).
+[push-audio-loopback](https://github.com/federico-pepe/ableton-push-hack) (the virtual audio card), push-manager and push-display, and the PushHack Remote Script in Live (to create the tracks). For the audio mixer below: push-audio-loopback 0.2.0-alpha or later.
+
+## Audio mixer
+
+MonoModule plays through the audio mixer of **push-audio-loopback** when it runs. The mixer adds the audio of all audio hacks, so MonoModule and Braids can play at the same time. The mixer owns the card and plays stereo pairs: the web page's *System* tab then offers the channel pair (the mixer remembers it), and the *Output* (stereo/mono) and device lists are off. Without the mixer, MonoModule writes to the card itself, with stereo or mono output and any device, and only one audio hack can do this at a time. It switches by itself when the mixer starts or stops.
+
+*Create the audio and MIDI tracks in Live* never changes your channel pair. If Live does not offer the input, it says which inputs Live offers; enable the input in Push's audio preferences, or pick one of those channels on the web page.
+
+The design is in [docs/audio-bus.md](https://github.com/federico-pepe/ableton-push-hack/blob/main/docs/audio-bus.md) in the main Push Hack repository.
 
 ## Install and build
 
@@ -36,7 +44,7 @@ make smoke    # off-device test of the audio path and web API
 scripts/deploy.sh <push-host>
 ```
 
-`go.sum` is not committed; `make` runs `go mod tidy` in the container.
+`go.sum` is not committed; `make` runs `go mod tidy` in the container. `core/audiobus` comes from `core/v0.5.3`, pinned in `src/go.mod`.
 
 ## Use
 

@@ -63,6 +63,8 @@ func s16(v float32) int16 {
 		return 32767
 	case v < -32768:
 		return -32768
+	case v != v: // NaN from the engine
+		return 0
 	}
 	return int16(v)
 }

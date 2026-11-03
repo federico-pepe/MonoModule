@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Plays through the audio mixer of push-audio-loopback (audio bus) when it runs, so other audio hacks can play at the same time. Without the mixer it writes to the card directly, as before. Needs push-audio-loopback 0.2.0-alpha or later for this mode.
+- Web page (System tab): the channel (or pair) and the audio output device are dropdowns now, listed from the card and the system.
+- Create tracks in Live no longer switches your channel to the one input Live offers; it reports what Live offers.
+- The audio session reopens when the device disappears (it spun at full CPU before). A NaN from the engine plays as silence.
+- The web page stops building state when no browser is connected.
+
 ## 0.1.0-alpha
 
 First version. Engine, sequencer, Push panel, web page, MIDI map and Push Hack integration. Tested off device only; not verified on a Push 3, Live or the loopback card.

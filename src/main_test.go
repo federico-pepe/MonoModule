@@ -125,6 +125,7 @@ func TestAudioPath(t *testing.T) {
 	hp := hwparams.Params{Channels: 8, Rate: 48000, Period: 512, Buffer: 2048}
 	a.cfg.ChannelOffset = 2
 	a.cfg.OutputMode = outmix.Stereo
+	a.storeMirror(a.cfg)
 	s, err := a.startSession(hp, "hw:fake")
 	if err != nil {
 		t.Fatal(err)

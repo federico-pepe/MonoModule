@@ -2,6 +2,7 @@ package livelink
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -17,32 +18,36 @@ func TestPair(t *testing.T) {
 			t.Fatal(bad)
 		}
 	}
-	if p, ok := OnlyPair([]string{"1", "2", "5/6"}); !ok || p != "5/6" {
-		t.Fatal("only")
+}
+
+// Live offers only the pair 5/6: the module must not switch to it on its own.
+func TestEnsureKeepsChosenChannel(t *testing.T) {
+	asked := 0
+	call := func(ns, cmd string, args map[string]any) (json.RawMessage, error) {
+		if cmd == "ensure" && args["kind"] == "audio" {
+			asked++
+			return nil, &Error{Code: "bad_routing", Data: json.RawMessage(`{"what":"channel","options":["1","2","5/6"]}`)}
+		}
+		t.Fatalf("unexpected call %s.%s", ns, cmd)
+		return nil, nil
 	}
-	if _, ok := OnlyPair([]string{"1/2", "3/4"}); ok {
-		t.Fatal("two pairs")
+	_, err := EnsureTracks(call, 0, false)
+	if err == nil || asked != 1 || !strings.Contains(err.Error(), "5/6") {
+		t.Fatalf("%v (asked %d)", err, asked)
 	}
 }
 
-func TestEnsureSwitchesToOnlyPair(t *testing.T) {
-	calls := 0
+func TestEnsureMakesAudioAndMIDITracks(t *testing.T) {
+	var kinds []string
 	call := func(ns, cmd string, args map[string]any) (json.RawMessage, error) {
-		if cmd == "ensure" && args["kind"] == "audio" {
-			calls++
-			if calls == 1 {
-				return nil, &Error{Code: "bad_routing", Data: json.RawMessage(`{"what":"channel","options":["1","2","5/6"]}`)}
-			}
-			if ch := args["input_channel"].([]string)[0]; ch != "5/6" {
-				t.Fatalf("retry on %s", ch)
-			}
+		if cmd == "ensure" {
+			kinds = append(kinds, args["kind"].(string))
 		}
 		return json.RawMessage(`{"track":1,"created":true}`), nil
 	}
-	got := -1
-	res, err := EnsureTracks(call, 0, false, func(o int, m bool) error { got = o; return nil })
-	if err != nil || got != 4 || len(res.Lines) < 3 {
-		t.Fatalf("%v %d %v", err, got, res.Lines)
+	res, err := EnsureTracks(call, 2, true)
+	if err != nil || len(kinds) != 2 || kinds[0] != "audio" || kinds[1] != "midi" || len(res.Lines) < 3 {
+		t.Fatalf("%v %v %v", err, kinds, res.Lines)
 	}
 }
 
@@ -50,7 +55,7 @@ func TestEnsureReportsMissingPair(t *testing.T) {
 	call := func(ns, cmd string, args map[string]any) (json.RawMessage, error) {
 		return nil, &Error{Code: "bad_routing", Data: json.RawMessage(`{"what":"channel","options":["1/2","3/4"]}`)}
 	}
-	if _, err := EnsureTracks(call, 6, false, func(int, bool) error { return nil }); err == nil {
+	if _, err := EnsureTracks(call, 6, false); err == nil {
 		t.Fatal("expected error")
 	}
 }
@@ -66,34 +71,5 @@ func TestChannelNames(t *testing.T) {
 		if _, ok := ParseMono(bad); ok {
 			t.Fatal(bad)
 		}
-	}
-	if n, o, ok := OnlyChannel([]string{"1/2", "7"}, true); !ok || n != "7" || o != 6 {
-		t.Fatal("only mono")
-	}
-	if _, _, ok := OnlyChannel([]string{"1", "2"}, true); ok {
-		t.Fatal("two singles")
-	}
-}
-
-func TestEnsureMonoSwitches(t *testing.T) {
-	n := 0
-	call := func(ns, cmd string, args map[string]any) (json.RawMessage, error) {
-		if cmd == "ensure" && args["kind"] == "audio" {
-			n++
-			if n == 1 {
-				if args["input_channel"].([]string)[0] != "3" {
-					t.Fatal("asked for", args["input_channel"])
-				}
-				return nil, &Error{Code: "bad_routing", Data: json.RawMessage(`{"what":"channel","options":["1/2","7"]}`)}
-			}
-			if args["input_channel"].([]string)[0] != "7" {
-				t.Fatal("retry", args["input_channel"])
-			}
-		}
-		return json.RawMessage(`{"track":1,"created":true}`), nil
-	}
-	off, mono := -1, false
-	if _, err := EnsureTracks(call, 2, true, func(o int, m bool) error { off, mono = o, m; return nil }); err != nil || off != 6 || !mono {
-		t.Fatalf("%v %d %v", err, off, mono)
 	}
 }

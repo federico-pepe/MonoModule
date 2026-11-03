@@ -91,6 +91,7 @@ func runModule() {
 	if a.pmURL == "" {
 		a.pmURL = defaultPushManagerURL
 	}
+	a.storeMirror(cfg)
 	a.status.set(false, msgNoCard)
 	a.eng = engine.New(44100)
 	if a.st, err = store.Open(a.dataDir, a.eng); err != nil {
